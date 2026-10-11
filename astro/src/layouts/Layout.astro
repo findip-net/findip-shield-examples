@@ -1,0 +1,46 @@
+---
+interface Props {
+  title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <style is:global>
+      main {
+        font-family: system-ui, sans-serif;
+        max-width: 420px;
+        margin: 48px auto;
+        padding: 0 16px;
+      }
+      input {
+        display: block;
+        width: 100%;
+        margin: 4px 0 12px;
+        padding: 8px;
+        box-sizing: border-box;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <slot />
+    </main>
+
+    <!--
+      Astro bundles this script and runs it in the browser, once per page.
+      It sits in the base layout, so Shield starts on every page.
+    -->
+    <script>
+      import { startShield } from '../lib/shield';
+
+      startShield();
+    </script>
+  </body>
+</html>

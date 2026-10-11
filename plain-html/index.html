@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FindIP Shield + plain HTML</title>
+    <style>
+      main { font-family: system-ui, sans-serif; max-width: 420px; margin: 48px auto; padding: 0 16px; }
+      input { display: block; width: 100%; margin: 4px 0 12px; padding: 8px; box-sizing: border-box; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Create your account</h1>
+
+      <!--
+        A normal form post to your own server. Shield reports the submit as
+        `signup_attempt` and, because of data-session-field below, adds a
+        hidden `findip_session` input that your server reads.
+      -->
+      <form id="signup-form" name="signup" method="post" action="/signup">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required />
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8" />
+
+        <button type="submit">Create account</button>
+      </form>
+
+      <p id="result" role="status"></p>
+    </main>
+
+    <!--
+      Demo only: this folder has no server, so the post is stopped here and the
+      page shows the field your server would receive. Delete this script when
+      the form posts to a real endpoint.
+    -->
+    <script>
+      document.getElementById('signup-form').addEventListener('submit', function (event) {
+        event.preventDefault();
+        var sessionId = new FormData(event.target).get('findip_session');
+        document.getElementById('result').textContent = sessionId
+          ? 'Your server would receive findip_session=' + sessionId
+          : 'Shield is not running. Set your site key in data-site-key.';
+      });
+    </script>
+
+    <!-- FindIP Shield: one tag, before </body>, on every page. Replace pub_xxx with your public site key. -->
+    <script
+      src="https://cdn.findip.net/shield/v1.js"
+      data-site-key="pub_xxx"
+      data-auto-track="true"
+      data-privacy-mode="balanced"
+      data-session-field="true">
+    </script>
+  </body>
+</html>

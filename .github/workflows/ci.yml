@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.example }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          - nextjs-app-router
+          - react-vite
+          - vue
+          - astro
+          - sveltekit
+    defaults:
+      run:
+        working-directory: ${{ matrix.example }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ matrix.example }}/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  static:
+    name: Static checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: plain-html loads the SDK from the CDN with a placeholder key
+        run: |
+          grep -q 'src="https://cdn.findip.net/shield/v1.js"' plain-html/index.html
+          grep -q 'data-site-key="pub_xxx"' plain-html/index.html
+      - name: Skill and Cursor rule have the same body
+        run: |
+          body() { awk 'f>=2; /^---$/ { f++ }' "$1"; }
+          diff <(body skill/findip-shield/SKILL.md) <(body .cursor/rules/findip-shield.mdc)
+      - name: No real keys in the repository
+        run: |
+          ! grep -rEn --exclude-dir=node_modules --exclude-dir=.git '(pub|sec)_[A-Za-z0-9]{12,}' .

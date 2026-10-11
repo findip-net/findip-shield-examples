@@ -1,0 +1,79 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { verifyShieldSession } from '../lib/shield-verify';
+
+// Rendered on the server for each request, so it can handle the form post.
+export const prerender = false;
+
+let created = false;
+let error: 'missing' | 'not_completed' | null = null;
+
+if (Astro.request.method === 'POST') {
+  const data = await Astro.request.formData();
+  const email = data.get('email');
+  const password = data.get('password');
+
+  if (typeof email !== 'string' || typeof password !== 'string' || !email || !password) {
+    error = 'missing';
+    Astro.response.status = 400;
+  } else {
+    // Verify the Shield session before creating the account. The session ID
+    // arrives in the hidden field the SDK added to the form.
+    const sessionId = data.get('findip_session');
+    const verdict = await verifyShieldSession(typeof sessionId === 'string' ? sessionId : null, 'signup_attempt');
+    console.log('[shield] signup', verdict);
+
+    if (verdict.decision === 'reject') {
+      error = 'not_completed';
+      Astro.response.status = 403;
+    } else {
+      // decision === 'review': the signup goes ahead; this is where you would flag
+      // the new account for a closer look (email confirmation, manual review).
+
+      // ... create the account here ...
+
+      created = true;
+    }
+  }
+}
+---
+
+<Layout title="Create your account">
+  <h1>Create your account</h1>
+
+  <!--
+    The form is a normal form post. Shield reports the submit as `signup_attempt`
+    and, because of `sessionField: true`, adds the hidden `findip_session` input
+    that the server code above reads.
+  -->
+  {
+    created ? (
+      <p id="signup-done">Account created. Welcome!</p>
+    ) : (
+      <form id="signup-form" name="signup" method="post">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="email" required />
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8" />
+
+        <button type="submit">Create account</button>
+
+        {error === 'not_completed' && <p role="alert">We could not complete this signup. Please contact support.</p>}
+        {error === 'missing' && <p role="alert">Please enter an email and a password.</p>}
+      </form>
+    )
+  }
+
+  <script>
+    import { track } from '@findip/shield';
+    import { startShield } from '../lib/shield';
+
+    // An outcome only your app knows about is tracked by name. Context is
+    // limited to non-personal fields such as the plan.
+    if (document.getElementById('signup-done')) {
+      startShield(); // no-op when the layout's script already ran
+      void track('signup_success', { plan: 'free' });
+    }
+  </script>
+</Layout>
