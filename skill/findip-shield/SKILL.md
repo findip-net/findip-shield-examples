@@ -1,0 +1,212 @@
+---
+name: findip-shield
+description: Add FindIP Shield visitor risk detection to a web project. Use when the user asks to add, install, set up or integrate FindIP Shield or the @findip/shield SDK, or to add VPN, proxy, Tor or risky-visitor signals to a signup, login or checkout form. Detects the framework, installs the SDK or script tag, reads the site key from configuration, covers the forms, adds server verification where the project has a server, and verifies the install.
+---
+
+# Add FindIP Shield to this project
+
+FindIP Shield scores website visits and form submits using risk signals: VPN, proxy, Tor, relay, hosting, datacenter and malicious-IP activity, plus session behaviour such as a changing IP or country. It has two parts:
+
+- A **browser SDK** (`@findip/shield` on npm, or a script tag) that reports page views and form submits. It sends form metadata only, never form values.
+- A **server verification** call that your backend makes with a secret key before a sensitive action. This is where decisions are made.
+
+Follow the steps in order. Make the smallest change that completes each step, then stop and report. Working examples for every route below: https://github.com/findip-net/findip-shield-examples
+
+## Step 0. Preconditions
+
+1. Search the project for `@findip/shield`, `cdn.findip.net/shield` and `FindIP.init`. If Shield is already installed, do not add a second copy: go to step 5 and continue from there.
+2. Ask the user for their **public site key** (`pub_...`). It comes from the Shield dashboard after they add their site: https://www.findip.net/shield. If they have no key yet, add the code that reads it from configuration, leave the value unset, and tell them where to put it. Never invent a key.
+3. A **secret key** (`sec_...`) is needed for step 6 only. It stays in server-side configuration.
+
+## Step 1. Detect the project and pick one route
+
+Check in this order and take the first match.
+
+| If the project is | Do this |
+|---|---|
+| A Shopify theme or app for a store | Add no code. Tell the user to install the app from https://apps.shopify.com/findip-shield and enter the site key there. Stop. |
+| A WordPress site (`wp-config.php`, `wp-content/`) | Add no code. Tell the user to install the "FindIP Shield" plugin from WordPress.org and enter the site key in its settings. Stop. |
+| Managed only through Google Tag Manager | Point the user to https://www.findip.net/docs/shield/google-tag-manager.md. Stop. |
+| A bundled JavaScript app: `package.json` lists `next`, `react`, `vue`, `nuxt`, `@sveltejs/kit`, `astro`, `vite` or `@angular/core` | **npm route**: steps 2A, 3, 4A |
+| Server-rendered or static HTML: Razor, Blade, Django, Rails, Jinja, PHP, plain HTML | **Script tag route**: steps 2B, 3, 4B |
+
+## Step 2A. npm route: add the dependency
+
+Use the project's package manager (look at the lockfile):
+
+```bash
+npm install @findip/shield      # or: pnpm add / yarn add / bun add
+```
+
+The package exports `init`, `track`, `identify`, `getSession`, `setConsent` and `version`, as ESM and CommonJS with TypeScript types.
+
+## Step 2B. Script tag route
+
+No dependency. The tag is added in step 4B.
+
+## Step 3. Read the site key from configuration
+
+Use the project's existing configuration mechanism. If it has none, use these names:
+
+| Framework | Public site key | Secret key (server only) |
+|---|---|---|
+| Next.js | `NEXT_PUBLIC_FINDIP_SHIELD_SITE_KEY` | `FINDIP_SHIELD_SECRET_KEY` |
+| Vite (React, Vue, Svelte) | `VITE_FINDIP_SHIELD_SITE_KEY` | `FINDIP_SHIELD_SECRET_KEY` on your backend |
+| SvelteKit, Astro | `PUBLIC_FINDIP_SHIELD_SITE_KEY` | `FINDIP_SHIELD_SECRET_KEY` |
+| Nuxt | `NUXT_PUBLIC_FINDIP_SHIELD_SITE_KEY` (runtime config `public.findipShieldSiteKey`) | `FINDIP_SHIELD_SECRET_KEY` |
+| Server-rendered HTML | `FINDIP_SHIELD_SITE_KEY`, written into the tag by the template | `FINDIP_SHIELD_SECRET_KEY` |
+
+Add both names to the project's example env file (`.env.example` or equivalent) with the values left empty. Put the real values only in an untracked env file or the deployment's settings. The secret key never gets a `NEXT_PUBLIC_`, `VITE_`, `PUBLIC_` or `NUXT_PUBLIC_` name.
+
+## Step 4A. npm route: initialise once, in the browser
+
+The SDK uses `window` and `document`. Call `init` exactly once, in client-side code that runs on every page, and skip it when the key is missing.
+
+```ts
+import { init } from '@findip/shield';
+
+init({
+  siteKey,                 // from step 3
+  privacyMode: 'balanced', // 'strict' | 'balanced' | 'advanced'; keep 'balanced' unless the user says otherwise
+  autoTrack: true,         // page views
+  autoDetectForms: true,   // reports signup, login, checkout and lead form submits
+});
+```
+
+Where it goes:
+
+| Framework | Placement | Example folder |
+|---|---|---|
+| Next.js App Router | A `'use client'` component that calls `init` inside `useEffect`, rendered once in `app/layout.tsx` | `nextjs-app-router` |
+| Next.js Pages Router | `useEffect` in `pages/_app.tsx` | |
+| React + Vite | `main.tsx`, before `createRoot` | `react-vite` |
+| Vue | A plugin installed in `main.ts` | `vue` |
+| Nuxt | A client-only plugin, `plugins/findip-shield.client.ts` | |
+| SvelteKit | `onMount` in the root `src/routes/+layout.svelte` | `sveltekit` |
+| Astro | A `<script>` in the base layout | `astro` |
+| Angular | `afterNextRender` in the root component, or `main.ts` for a browser-only app | |
+
+Guard against a second call (React StrictMode and hot reload run effects twice): keep a module-level flag, as the examples do.
+
+## Step 4B. Script tag route: add one tag
+
+Add this before the closing `</body>` of the shared layout, so it is on every page. Write the site key from configuration with the template's own output syntax.
+
+```html
+<script
+  src="https://cdn.findip.net/shield/v1.js"
+  data-site-key="pub_xxxxxxxxx"
+  data-auto-track="true"
+  data-privacy-mode="balanced">
+</script>
+```
+
+- `v1.js` serves the latest compatible 1.x build. If the project pins third-party scripts, use the pinned snippet with its integrity hash from the site's Install page in the dashboard or from https://www.findip.net/docs/shield/quickstart.md. Copy the hash; never compute or guess one.
+- If the site sends a Content-Security-Policy, add `script-src https://cdn.findip.net` and `connect-src https://shield.findip.net`.
+- The tag initialises itself and exposes `window.FindIP` with the same methods as the npm package.
+- Other attributes: `data-auto-detect-forms`, `data-push-to-data-layer`, `data-session-field`, `data-link-session`, `data-debug`.
+
+Example folder: `plain-html`.
+
+## Step 5. Track the signup, login and checkout forms
+
+Find the project's signup, login, checkout or payment, lead and password-reset forms. For each one:
+
+1. **If it is a `<form>` element submitted by a submit button** (including forms handled with `onSubmit`, `@submit`, `use:enhance` or a fetch call inside the handler): add nothing. With `autoDetectForms: true` the SDK reports the submit as `signup_attempt`, `login_attempt`, `payment_attempt`, `lead_submitted` or `password_reset_attempt`. Give the form a stable `id` or `name` if it has neither, so the dashboard can tell forms apart. Do not also call `track()` with the same event name: the submit would be counted twice.
+2. **If no submit event fires** (a button with a click handler and no `<form>`, or a multi-step wizard): call `track` when the user submits.
+
+   ```ts
+   import { track } from '@findip/shield';
+   await track('signup_attempt', { plan: 'free' });
+   ```
+
+3. **Outcomes that only the application knows**: optionally report them after the server answers, with `track('signup_success')`, `track('login_success')`, `track('login_failed')` or `track('payment_failed')`.
+
+Event names come from this list only: `signup_attempt`, `signup_success`, `login_attempt`, `login_success`, `login_failed`, `password_reset_attempt`, `checkout_started`, `payment_attempt`, `payment_failed`, `lead_submitted`, `custom`.
+
+Context fields come from this list only: `user_id_hash`, `email_hash`, `email_domain`, `account_age_days`, `plan`, `transaction_amount`, `currency`, `form_name`, `lead_source`, `custom`. Never pass an email address, name, phone number, password or card data to `track`. To attach a logged-in user, call `identify({ userId, email, plan })` after login and `identify(null)` on logout; the SDK hashes the values in the browser.
+
+## Step 6. Server verification (when the project has a server)
+
+Do this step if the project has server code that handles the signup, login or payment request: a Next.js route handler or server action, SvelteKit form action, Astro endpoint, Nuxt server route, Express, Rails, Django, Laravel, ASP.NET and so on. If the project is a static site or a client-only app with no backend in the repository, skip the code, and tell the user that their backend should make this call.
+
+The browser SDK reports signals. The server makes the decision, because a request to your endpoint can be sent without running the page.
+
+**6.1 Send the Shield session ID with the request.**
+
+- Fetch or XHR submit: read it at submit time and add it to the body.
+
+  ```ts
+  import { getSession } from '@findip/shield';
+  const { sessionId } = getSession();
+  // body: { ...fields, findip_session_id: sessionId }
+  ```
+
+- Form post (the browser or the framework posts the form): add `sessionField: true` to `init`, or `data-session-field="true"` to the script tag. The SDK (1.11.0 or later) adds a hidden input named `findip_session` to forms that POST to the page's own origin. The form needs `method="post"`.
+
+**6.2 Verify before the sensitive action** (before creating the account, issuing the session or capturing payment):
+
+```http
+POST https://shield.findip.net/v1/shield/sessions/verify
+Authorization: Bearer <FINDIP_SHIELD_SECRET_KEY>
+Content-Type: application/json
+
+{ "session_id": "<session ID from the request>", "event": "signup_attempt" }
+```
+
+Use `login_attempt` or `payment_attempt` as the event for those flows.
+
+Response fields to use: `verified` (boolean), `risk_status` (`available` or `unknown`), `risk_score` (0 to 100), `recommendation` (`allow`, `monitor`, `challenge`, `block`), `challenge_passed` (true once the visitor completed a challenge that Shield verified), and `session.network` (`vpn`, `proxy`, `tor`, `relay`, `hosting`, `datacenter`, `malicious`).
+
+**6.3 Apply this policy** unless the user gives another one:
+
+| Verify result | Action |
+|---|---|
+| `recommendation` is `block` | Reject the request with a neutral message |
+| `recommendation` is `challenge` and `challenge_passed` is false | Reject the request with a neutral message |
+| `recommendation` is `challenge` and `challenge_passed` is true | Continue |
+| `risk_status` is `unknown`, or `recommendation` is `monitor` | Continue, and log it for review. `unknown` is never treated as safe |
+| `verified` is false, the session ID is missing, or the call fails or times out | Continue, and log it for review. Tell the user this is the default, and that they can choose to reject instead |
+| `recommendation` is `allow` | Continue |
+
+Put the call in one server-only helper, with a timeout of a few seconds. Copy the helper from the matching example: `nextjs-app-router/lib/shield-verify.ts`, `sveltekit/src/server/shield-verify.ts` or `astro/src/lib/shield-verify.ts`. For other server languages, write the same request and the same policy.
+
+A neutral message says the request could not be completed and offers a way to contact support. It does not tell the visitor they were flagged, and it does not name a signal.
+
+## Step 7. Verify the install
+
+1. Run the project's type check and build. Both must pass.
+2. Search the client bundle and client source for `sec_` and `FINDIP_SHIELD_SECRET_KEY`. The secret must appear in server code only.
+3. Confirm `init` is called from one place, and that no server-only file imports `@findip/shield`.
+4. If a site key is set and you can run the app: load a page, open DevTools, Network tab, and filter for `shield/track`. A `POST` to `https://shield.findip.net/v1/shield/track` after page load means the SDK is sending. Submit the form and check that a second request follows.
+5. If you cannot run a browser, say so, and give the user check 4 to do themselves.
+
+## Step 8. Report to the user
+
+State, briefly:
+
+- which route you took and which files changed;
+- where each key is read from, and that the secret key must be set on the server only;
+- that Shield starts in monitor mode: it records and scores, and changes nothing for visitors until the site owner chooses a response per form in the dashboard;
+- that their domain must be on the site's allowed-domains list in the dashboard for events to be accepted;
+- what you could not verify.
+
+## Rules
+
+- Decide on the server. The browser SDK and in-page enforcement add friction for automated and casual abuse; the verify call in step 6 is the control that a client cannot skip.
+- Treat results as risk signals. A VPN or a high score is a reason to look closer, to challenge or to review. Do not write code that blocks or redirects a visitor because one flag such as `vpn` is true; use the `recommendation`, and leave per-form responses to the site owner in the dashboard.
+- Keep personal data out of `track()`. Use `identify()` for the logged-in user.
+- Keep the secret key out of client code, public env variables and the repository.
+- Import `@findip/shield` in browser code only.
+- One install per site. One `init` call per page.
+
+## References
+
+- Agent install recipe (canonical): https://www.findip.net/docs/shield/agent-install.md
+- Quickstart: https://www.findip.net/docs/shield/quickstart.md
+- SDK reference: https://www.findip.net/docs/shield/javascript-sdk.md
+- Server verification: https://www.findip.net/docs/shield/server-verification.md
+- Events: https://www.findip.net/docs/shield/events.md
+- Privacy modes and data collection: https://www.findip.net/docs/shield/privacy-modes.md · https://www.findip.net/docs/shield/data-collection.md
+- All Shield docs in one file: https://www.findip.net/llms-full.txt
+- Examples: https://github.com/findip-net/findip-shield-examples
