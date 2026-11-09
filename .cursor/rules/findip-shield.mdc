@@ -15,7 +15,7 @@ Follow the steps in order. Make the smallest change that completes each step, th
 ## Step 0. Preconditions
 
 1. Search the project for `@findip/shield`, `cdn.findip.net/shield` and `FindIP.init`. If Shield is already installed, do not add a second copy: go to step 5 and continue from there.
-2. Ask the user for their **public site key** (`pub_...`). It comes from the Shield dashboard after they add their site: https://www.findip.net/shield. If they have no key yet, add the code that reads it from configuration, leave the value unset, and tell them where to put it. Never invent a key.
+2. If the user's request already gives a **public site key** (`pub_...`), for example the prompt from the Shield Install page, use it and do not ask again. Otherwise ask the user for it. It comes from the Shield dashboard after they add their site: https://www.findip.net/shield. If they have no key yet, add the code that reads it from configuration, leave the value unset, and tell them where to put it. Never invent a key.
 3. A **secret key** (`sec_...`) is needed for step 6 only. It stays in server-side configuration.
 
 ## Step 1. Detect the project and pick one route
@@ -178,8 +178,9 @@ A neutral message says the request could not be completed and offers a way to co
 1. Run the project's type check and build. Both must pass.
 2. Search the client bundle and client source for `sec_` and `FINDIP_SHIELD_SECRET_KEY`. The secret must appear in server code only.
 3. Confirm `init` is called from one place, and that no server-only file imports `@findip/shield`.
-4. If a site key is set and you can run the app: load a page, open DevTools, Network tab, and filter for `shield/track`. A `POST` to `https://shield.findip.net/v1/shield/track` after page load means the SDK is sending. Submit the form and check that a second request follows.
-5. If you cannot run a browser, say so, and give the user check 4 to do themselves.
+4. If a site key is set and you can run the app: load a page, open DevTools, Network tab, and filter for `shield/track`. A `POST` to `https://shield.findip.net/v1/shield/track` after page load means the SDK is sending. Submit the form and check that a second request follows. Before the site's first real visit, a visit from `localhost` is answered `202` with `test_visit: true`: it is a test, never stored. After the first real visit, localhost is refused as `domain_mismatch`; do not add `localhost` as a site domain.
+5. Check the install status, which needs no sign-in: `GET https://shield.findip.net/v1/shield/install-status?site_key=pub_...`. It answers `state` and a plain-text `message`: `test_visit` (the SDK works locally; the user deploys next), `receiving` (done), `refused` (follow `message`) or `waiting` (load a page and check once more). Check a few times at most; do not poll in a loop.
+6. If you cannot run a browser, say so, and give the user checks 4 and 5 to do themselves.
 
 ## Step 8. Report to the user
 
@@ -189,7 +190,7 @@ State, briefly:
 - where each key is read from, and that the secret key must be set on the server only;
 - that Shield starts in monitor mode: it records and scores, and changes nothing for visitors until the site owner chooses a response per form in the dashboard;
 - that their domain must be on the site's allowed-domains list in the dashboard for events to be accepted;
-- what you could not verify.
+- what the install status said, and what you could not verify.
 
 ## Rules
 
